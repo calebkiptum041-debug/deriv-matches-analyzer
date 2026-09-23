@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Deriv Real Market Analyzer</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.10);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+        }
+
+        label {
+            display: block;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        select,
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 8px;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        select {
+            border: 1px solid #cbd5e1;
+            background: white;
+        }
+
+        button {
+            border: none;
+            background: #2563eb;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 14px;
+            background: #e2e8f0;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .card {
+            padding: 18px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .label {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .value {
+            font-size: 26px;
+            font-weight: bold;
+            margin-top: 7px;
+        }
+
+        .digits {
+            margin-top: 20px;
+            padding: 18px;
+            background: #111827;
+            color: white;
+            border-radius: 10px;
+            line-height: 2;
+            word-break: break-word;
+        }
+
+        .frequency {
+            margin-top: 20px;
+        }
+
+        .frequency-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .digit-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+        }
+
+        .digit-number {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .note {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff7ed;
+            color: #7c2d12;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Deriv Real Market Analyzer</h1>
+
+    <p class="subtitle">
+        Live Volatility Indices • Matches-only statistical analysis
+    </p>
+
+    <label for="market">
+        Select Volatility Market
+    </label>
+
+    <select id="market">
+        <option value="">Loading real markets...</option>
+    </select>
+
+    <button onclick="startAnalysis()">
+        START LIVE ANALYSIS
+    </button>
+
+    <div id="status" class="status">
+        Loading real Deriv markets...
+    </div>
+
+    <div class="grid">
+
+        <div class="card">
+            <div class="label">Market</div>
+            <div id="selectedMarket" class="value">-</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Current Price</div>
+            <div id="price" class="value">-</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Last Digit</div>
+            <div id="lastDigit" class="value">-</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Ticks Analyzed</div>
+            <div id="tickCount" class="value">0</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Matches Found</div>
+            <div id="matches" class="value">0</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Match Percentage</div>
+            <div id="matchPercentage" class="value">0%</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Current Gap</div>
+            <div id="currentGap" class="value">0</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Maximum Gap</div>
+            <div id="maximumGap" class="value">0</div>
+        </div>
+
+    </div>
+
+    <div class="digits">
+        <strong>Recent Digits</strong>
+        <div id="recentDigits">
+            Waiting for live ticks...
+        </div>
+    </div>
+
+    <div class="frequency">
+
+        <h3>Digit Frequency</h3>
+
+        <div class="frequency-grid" id="frequencyGrid">
+        </div>
+
+    </div>
+
+    <div class="note">
+        This application analyzes real Deriv market tick data.
+        It provides statistical information only and does not
+        guarantee future contract outcomes.
+    </div>
+
+</div>
+
+<script>
+
+const API_URL =
+    "https://api.deriv.com";
+
+let socket = null;
+
+let digits = [];
+
+let matches = 0;
+
+let currentGap = 0;
+
+let maximumGap = 0;
+
+let frequency = {
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+    6: 0,
+    7: 0,
+    8: 0,
+    9: 0
+};
+
+
+/*
+    Display digit frequency boxes
+*/
+
+function createFrequencyBoxes() {
+
+    const grid =
+        document.getElementById("frequencyGrid");
+
+    grid.innerHTML = "";
+
+    for (let i = 0; i <= 9; i++) {
+
+        grid.innerHTML += `
+
+            <div class="digit-box">
+
+                <div class="digit-number">
+                    ${i}
+                </div>
+
+                <div id="freq-${i}">
+                    0
+                </div>
+
+            </div>
+
+        `;
+    }
+}
+
+
+/*
+    Reset analysis
+*/
+
+function resetAnalysis() {
+
+    digits = [];
+
+    matches = 0;
+
+    currentGap = 0;
+
+    maximumGap = 0;
+
+    frequency = {
+        0: 0,
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0,
+        6: 0,
+        7: 0,
+        8: 0,
+        9: 0
+    };
+
+    document.getElementById("price").textContent = "-";
+
+    document.getElementById("lastDigit").textContent = "-";
+
+    document.getElementById("tickCount").textContent = "0";
+
+    document.getElementById("matches").textContent = "0";
+
+    document.getElementById("matchPercentage").textContent = "0%";
+
+    document.getElementById("currentGap").textContent = "0";
+
+    document.getElementById("maximumGap").textContent = "0";
+
+    document.getElementById("recentDigits").textContent =
+        "Waiting for live ticks...";
+
+    createFrequencyBoxes();
+}
+
+
+/*
+    Get the final digit of the quoted price
+*/
+
+function getLastDigit(price) {
+
+    const text = String(price);
+
+    const parts = text.split(".");
+
+    if (parts.length === 1) {
+
+        return Number(
+            parts[0].slice(-1)
+        );
+
+    }
+
+    return Number(
+        parts[1].slice(-1)
+    );
+}
+
+
+/*
+    Process each real tick
+*/
+
+function processTick(price) {
+
+    const digit =
+        getLastDigit(price);
+
+    document.getElementById("price")
+        .textContent = price;
+
+    document.getElementById("lastDigit")
+        .textContent = digit;
+
+    frequency[digit]++;
+
+    if (digits.length > 0) {
+
+        const previousDigit =
+            digits[digits.length - 1];
+
+        if (digit === previousDigit) {
+
+            matches++;
+
+            currentGap = 0;
+
+        } else {
+
+            currentGap++;
+
+            if (currentGap > maximumGap) {
+
+                maximumGap =
+                    currentGap;
+            }
+        }
+    }
+
+    digits.push(digit);
+
+    /*
+        Keep the most recent 200 ticks
+    */
+
+    if (digits.length > 200) {
+
+        digits.shift();
+    }
+
+    const comparisons =
+        Math.max(digits.length - 1, 1);
+
+    const percentage =
+        (matches / comparisons) * 100;
+
+    document.getElementById("tickCount")
+        .textContent = digits.length;
+
+    document.getElementById("matches")
+        .textContent = matches;
+
+    document.getElementById("matchPercentage")
+        .textContent =
+        percentage.toFixed(2) + "%";
+
+    document.getElementById("currentGap")
+        .textContent = currentGap;
+
+    document.getElementById("maximumGap")
+        .textContent = maximumGap;
+
+    document.getElementById("recentDigits")
+        .textContent =
+        digits.join(" ");
+
+    for (let i = 0; i <= 9; i++) {
+
+        document.getElementById(`freq-${i}`)
+            .textContent = frequency[i];
+    }
+}
+
+
+/*
+    Start live analysis
+*/
+
+function startAnalysis() {
+
+    const market =
+        document.getElementById("market").value;
+
+    const marketName =
+        document.getElementById("market")
+        .options[
+            document.getElementById("market").selectedIndex
+        ].text;
+
+    if (!market) {
+
+        alert("Please select a real Volatility market.");
+
+        return;
+    }
+
+    if (socket) {
+
+        socket.close();
+    }
+
+    resetAnalysis();
+
+    document.getElementById("selectedMarket")
+        .textContent = marketName;
+
+    document.getElementById("status")
+        .textContent =
+        "Connecting to the real Deriv market...";
+
+    /*
+        The live connection will be added after
+        the real Deriv API connection is verified.
+    */
+
+    alert(
+        "Market selected: " +
+        marketName +
+        "\n\nThe next step is connecting this analyzer to Deriv's live tick feed."
+    );
+}
+
+
+/*
+    Create the initial frequency display
+*/
+
+createFrequencyBoxes();
+
+</script>
+
+</body>
+</html>
